@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 import yaml
 
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = ROOT / "platform.yml"
+DEFAULT_CONFIG = ROOT / "platform.yml"
 
 
 def shell_quote(value: object) -> str:
@@ -17,7 +18,11 @@ def shell_quote(value: object) -> str:
 
 
 def main() -> None:
-    with CONFIG.open() as f:
+    config_path = Path(os.environ.get("CONFIG", DEFAULT_CONFIG))
+    if not config_path.is_absolute():
+        config_path = ROOT / config_path
+
+    with config_path.open() as f:
         data = yaml.safe_load(f) or {}
 
     platform = data["platform"]
@@ -32,6 +37,12 @@ def main() -> None:
         "REGISTRY_NAMESPACE": platform["registry"]["namespace"],
         "REGISTRY_HOST": platform["registry"]["host"],
         "ARGOCD_VERSION": versions["argocd"],
+        "KUBERNETES_VERSION": versions["kubernetes"],
+        "KUBERNETES_MINOR_VERSION": versions["kubernetesMinor"],
+        "FLANNEL_VERSION": versions["flannel"],
+        "METRICS_SERVER_VERSION": versions["metricsServer"],
+        "HELM_VERSION": versions["helm"],
+        "LOCAL_PATH_PROVISIONER_VERSION": versions["localPathProvisioner"],
         "TRAEFIK_CHART_VERSION": versions["traefikChart"],
         "METALLB_CHART_VERSION": versions["metallbChart"],
         "GATEWAY_API_VERSION": versions["gatewayApi"],

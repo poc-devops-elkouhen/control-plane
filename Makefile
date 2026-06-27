@@ -1,13 +1,25 @@
 CONFIG ?= platform.yml
-ENV = ./scripts/export-env.py > /tmp/control-plane.env && . /tmp/control-plane.env
+ENV_FILE ?= /tmp/control-plane.env
+ENV = CONFIG="$(CONFIG)" ./scripts/export-env.py > "$(ENV_FILE)" && . "$(ENV_FILE)"
 
-.PHONY: help env cluster-up platform-bootstrap gitlab-seed argocd-repo-creds status
+.PHONY: help env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-bootstrap gitlab-seed argocd-repo-creds status
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
 
 env: ## Affiche les variables exportees depuis platform.yml
-	@./scripts/export-env.py
+	@CONFIG="$(CONFIG)" ./scripts/export-env.py
+
+vm-images-build: ## Construit les boxes Vagrant k8s-master/k8s-worker via Packer
+	@$(ENV); \
+	$(MAKE) -C "$$CLUSTER_REPO/packer" build
+
+vm-images-add: ## Ajoute les boxes Packer construites au registre Vagrant local
+	@$(ENV); \
+	vagrant box add k8s-master "$$CLUSTER_REPO/packer/output/k8s-master/package.box" --force; \
+	vagrant box add k8s-worker "$$CLUSTER_REPO/packer/output/k8s-worker/package.box" --force
+
+vm-images: vm-images-build vm-images-add ## Construit et enregistre les images VM du cluster
 
 cluster-up: ## Provisionne le socle cluster via ../cluster
 	@$(ENV); \
@@ -15,6 +27,15 @@ cluster-up: ## Provisionne le socle cluster via ../cluster
 	  gateway_api_version="$$GATEWAY_API_VERSION" \
 	  metallb_chart_version="$$METALLB_CHART_VERSION" \
 	  traefik_chart_version="$$TRAEFIK_CHART_VERSION"
+
+cluster-from-images: vm-images-add ## Deploie le cluster depuis les boxes Packer k8s-master/k8s-worker
+	@$(ENV); \
+	$(MAKE) -C "$$CLUSTER_REPO" create-cluster \
+	  gateway_api_version="$$GATEWAY_API_VERSION" \
+	  metallb_chart_version="$$METALLB_CHART_VERSION" \
+	  traefik_chart_version="$$TRAEFIK_CHART_VERSION"
+
+platform-up: vm-images cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
 
 platform-bootstrap: ## Bootstrap ArgoCD et la plateforme via ../platform-cicd
 	@$(ENV); \

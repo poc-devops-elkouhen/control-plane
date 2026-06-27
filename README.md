@@ -14,10 +14,41 @@ des repos specialises avec des variables explicites :
 - `../platform-cicd` : ArgoCD, GitLab, registry, runner et apps platform.
 - `../toolbox` : seed GitLab, credentials ArgoCD et onboarding.
 
+La vue globale du projet vit ici :
+
+- `docs/prd.md` : intention, périmètre et limites du POC.
+- `docs/spec-fonctionnelle.md` : flow Git, CI/CD et parcours applicatif.
+- `docs/spec-technique.md` : détails d'implémentation et contraintes infra.
+
 ## Usage
+
+Parcours complet avec images VM Packer :
+
+```sh
+make platform-up
+```
+
+Cette commande enchaine :
+
+- `make vm-images` : construit puis enregistre les boxes Vagrant `k8s-master`
+  et `k8s-worker`.
+- `make cluster-from-images` : demarre les VMs et initialise le cluster depuis
+  ces boxes.
+- `make platform-bootstrap` : installe ArgoCD puis bootstrappe GitLab, le
+  registry, le runner et les apps plateforme.
+
+Les etapes restent executables separement :
 
 ```sh
 make env
+make vm-images
+make cluster-from-images
+make platform-bootstrap
+```
+
+Le chemin historique sans images Packer reste disponible :
+
+```sh
 make cluster-up
 make platform-bootstrap
 make gitlab-seed
@@ -30,3 +61,15 @@ dans ce repo, puis peut etre surchargee ici pour orchestrer le POC complet.
 
 Les compromis de securite propres au POC sont documentes dans
 `docs/security-poc.md`.
+
+## Scripts workspace
+
+Les scripts operateur du workspace sont versionnes dans `scripts/` :
+
+```sh
+scripts/clone-github-org.sh
+scripts/commit-push-subprojects.sh --message "..." --remote github
+```
+
+Par defaut, ils ciblent le dossier parent de `control-plane`, c'est-a-dire le
+workspace qui contient les repos freres.
