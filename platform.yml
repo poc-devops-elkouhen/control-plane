@@ -18,6 +18,12 @@ platform:
     gitops: ../platform-gitops
     toolbox: ../toolbox
     ciTemplates: ../ci-templates
+  ciTemplate:
+    projectPath: root/ci-templates
+    projectName: ci-templates
+    sourceDir: ../ci-templates
+    ref: v0.11.1
+    file: /gitlab-ci.yml
 
 versions:
   kubernetes: "1.36.2"
@@ -30,4 +36,3 @@ versions:
   metallbChart: 0.14.9
   traefikChart: 41.0.0
   argocd: v3.4.4
-  ciTemplateRef: v0.11.1

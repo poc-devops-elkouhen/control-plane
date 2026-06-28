@@ -27,8 +27,10 @@ def main() -> None:
     platform = data["platform"]
     versions = data["versions"]
     repos = platform["repositories"]
+    ci_template = platform["ciTemplate"]
 
     values = {
+        "PLATFORM_CONFIG": config_path,
         "GITLAB_DOMAIN": platform["domain"],
         "GITLAB_NAMESPACE": platform["gitlab"]["namespace"],
         "INTERNAL_GITLAB_HOST": platform["gitlab"]["internalHost"],
@@ -45,12 +47,15 @@ def main() -> None:
         "TRAEFIK_CHART_VERSION": versions["traefikChart"],
         "METALLB_CHART_VERSION": versions["metallbChart"],
         "GATEWAY_API_VERSION": versions["gatewayApi"],
-        "CI_TEMPLATE_REF": versions["ciTemplateRef"],
         "CLUSTER_REPO": repos["cluster"],
         "PLATFORM_REPO_ROOT": repos["platform"],
         "GITOPS_REPO_ROOT": repos["gitops"],
         "TOOLBOX_REPO": repos["toolbox"],
-        "CI_TEMPLATE_SOURCE_DIR": repos["ciTemplates"],
+        "CI_TEMPLATE_PROJECT_PATH": ci_template["projectPath"],
+        "CI_TEMPLATE_PROJECT_NAME": ci_template["projectName"],
+        "CI_TEMPLATE_SOURCE_DIR": ci_template.get("sourceDir", repos["ciTemplates"]),
+        "CI_TEMPLATE_REF": ci_template["ref"],
+        "CI_TEMPLATE_FILE": ci_template["file"],
     }
 
     for key, value in values.items():
