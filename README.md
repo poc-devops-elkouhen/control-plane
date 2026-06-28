@@ -11,7 +11,8 @@ propre repo.
 des repos specialises avec des variables explicites :
 
 - `../cluster` : socle Kubernetes, storage, Gateway API, MetalLB, Traefik.
-- `../platform-cicd` : ArgoCD, GitLab, registry, runner et apps platform.
+- `../platform-cicd` : bootstrap ArgoCD, GitLab, registry et runner.
+- `../platform-gitops` : configuration suivie en continu par ArgoCD.
 - `../toolbox` : seed GitLab, credentials ArgoCD et onboarding.
 
 La vue globale du projet vit ici :
