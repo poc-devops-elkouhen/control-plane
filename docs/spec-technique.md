@@ -34,7 +34,7 @@ Notes :
   restent deux projets GitLab distincts : le pipeline CI tourne dans `<app>`
   mais clone et pousse sur `<app>-iac` via `GITLAB_PUSH_TOKEN`.
 - **Gate sur `main` du dépôt de code** (`<app>`) : configuré par
-  `../platform-cicd/scripts/gitlab-seed.py` (`configure_main_gate`) — branche protégée,
+  `../toolbox/scripts/gitlab-seed.py` (`configure_main_gate`) — branche protégée,
   `push_access_level: No one`, `merge_access_level: Maintainers`. Les
   features ne peuvent donc atteindre `main` que via une MR mergée par un
   Maintainer. L'« approbation obligatoire » (nombre d'approbateurs requis,
@@ -91,8 +91,8 @@ seul dépôt de code (`helloworld`), deux sous-dossiers/modules
 `helloworld-svc` (API FastAPI) et `helloworld-gui` (frontend statique
 nginx, qui appelle l'API via `helloworld-svc` en DNS interne du namespace,
 avec un préfixe HTTP proxié — pas de configuration d'URL par stage). Le fichier
-`argocd/apps/helloworld.yaml` porte `code:` au niveau app (pas par service) et `services: [...]` ne liste
-plus que `name`/`image` par service ; `../platform-cicd/scripts/gitlab-seed.py` crée et
+`platform-gitops/argocd/apps/helloworld.yaml` porte `code:` au niveau app (pas par service) et `services: [...]` ne liste
+plus que `name`/`image` par service ; `../toolbox/scripts/gitlab-seed.py` crée et
 seed un seul projet GitLab par app (boucle `apps` de l'inventaire) ;
 `ci-templates/gitlab-ci.yml` boucle sur `${SERVICES}` (liste
 `<service>=<image>` espacée) pour le build (un `Dockerfile` par
@@ -103,7 +103,7 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
 - **Repo `ci-templates`** (GitLab) : héberge le pipeline générique décrit
   ci-dessus. Source locale : `ci-templates/`, seedée par `make gitlab-seed`
   dans `ci-templates` (namespace `root`) avec une ref versionnée
-  (`v0.11.0` actuellement, déclarée dans `argocd/apps.yaml`).
+  (`v0.11.1` actuellement, déclarée dans `platform-gitops/argocd/apps.yaml`).
   Le `.gitlab-ci.yml` de chaque app se réduit à un `include` de
   ce template, **`ref` épinglée à une version** (ex. `v1.3.0`, pas `main`)
   + ses variables propres (`IMAGE`, `MANIFESTS_PROJECT_PATH`, `SERVICES`,
@@ -114,9 +114,11 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
   bumpé sa `ref`. Choix délibéré au prix d'un bump manuel par app : isole le
   rayon d'impact d'une régression du template, plutôt que de la propager
   instantanément à toutes les apps.
-- **Inventaire explicite `argocd/apps.yaml` + `argocd/apps/*.yaml`** :
-  `argocd/apps.yaml` porte la configuration globale et le répertoire d'apps ;
-  chaque application a son propre fichier dans `argocd/apps/`. L'ensemble reste
+- **Inventaire explicite `platform-gitops/argocd/apps.yaml` +
+  `platform-gitops/argocd/apps/*.yaml`** :
+  `platform-gitops/argocd/apps.yaml` porte la configuration globale et le
+  répertoire d'apps ; chaque application a son propre fichier dans
+  `platform-gitops/argocd/apps/`. L'ensemble reste
   la source de vérité des
   projets GitLab (`code.projectPath`, `manifests.projectPath`,
   `ciTemplate.projectPath`), du repo GitOps autorisé (`manifests.repoURL`),
@@ -140,7 +142,7 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
     cf. "Point d'entrée" dans AGENTS.md). Une copie réutilisable existe aussi
     dans `../toolbox/scripts/render-argocd-apps.py`, pilotable avec
     `PLATFORM_REPO_ROOT`.
-  - **`../platform-cicd/scripts/gitlab-seed.py` généralisé** : boucle sur l'inventaire pour créer et
+  - **`../toolbox/scripts/gitlab-seed.py` généralisé** : boucle sur l'inventaire pour créer et
     seeder les dépôts `<app>`/`<app>-iac`, configurer les gates, et
     initialiser les branches d'environnement du dépôt manifests selon
     `HAS_PREPROD`.
@@ -150,10 +152,18 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
   et exposition HTTP d'ArgoCD. Les add-ons cluster bas niveau (Gateway API,
   MetalLB, Traefik et Gateway partagée) sont provisionnés par Ansible.
 
-Modifier `argocd/apps.yaml` ou un fichier `argocd/apps/*.yaml` nécessite ensuite `make argocd-apps-render` puis
-`git commit`/`git push` sur `origin main` : ArgoCD (root Application) lit
-GitHub, pas le disque local — sans le push, le changement n'est jamais pris
-en compte.
+Modifier `platform-gitops/argocd/apps.yaml` ou un fichier
+`platform-gitops/argocd/apps/*.yaml` nécessite ensuite
+`make argocd-apps-render` puis `git commit`/`git push` sur `origin main`
+dans `platform-gitops` : ArgoCD lit Git, pas le disque local — sans le push,
+le changement n'est jamais pris en compte. Pendant l'amorcage, certaines
+references ArgoCD peuvent pointer vers GitHub pour eviter une dependance
+circulaire avec GitLab ; les operations toolbox qui modifient l'inventaire
+GitOps ouvrent leurs branches et merge requests sur le depot source GitHub.
+
+Voir aussi [`source-control.md`](./source-control.md) : GitHub est l'amont du
+code source et la cible de `PLATFORM_REPO_URL`, tandis que GitLab porte les
+depots runtime importes/seedes.
 
 ## Routage HTTP : Gateway API, Traefik et MetalLB
 
@@ -197,11 +207,11 @@ Pour une app standard, l'intégration attendue côté plateforme est :
      `Dockerfile` dans chaque sous-dossier ;
    - `<app>-iac/` pour les manifests, avec le chemin k8s déclaré dans
      `manifests.path` et un `kustomization.yaml`.
-2. Ajouter l'app dans `argocd/apps/<app>.yaml` (ou lancer `make init-project CODE_REPO=... IAC_REPO=...`).
+2. Ajouter l'app dans `platform-gitops/argocd/apps/<app>.yaml` (ou lancer `make init-project CODE_REPO=... IAC_REPO=...`).
 3. Régénérer l'ApplicationSet :
    `make argocd-apps-render`.
 4. Commiter puis pousser `argocd/apps.yaml`, `argocd/apps/<app>.yaml` et
-   `argocd/managed/apps-appset.yaml` sur `origin main`, afin que le root
+   `argocd/managed/apps-appset.yaml` depuis `platform-gitops` sur `origin main`, afin que le root
    Application ArgoCD voie le changement.
 5. Lancer `make gitlab-seed` pour créer ou mettre à jour les projets GitLab,
    le `.gitlab-ci.yml` applicatif, les branches d'environnement du dépôt
@@ -224,11 +234,11 @@ orchestre ces cibles via son propre `Makefile`.
 
 Une copie réutilisable de ces utilitaires a été extraite dans
 `../toolbox`. Cette toolbox sert aux autres projets ou aux appels
-hors du dépôt plateforme. Les scripts y acceptent `PLATFORM_REPO_ROOT` pour
-pointer vers la racine `platform-cicd` :
+hors du dépôt GitOps. Les scripts y acceptent `PLATFORM_REPO_ROOT` pour
+pointer vers la racine `platform-gitops` :
 
 ```sh
-PLATFORM_REPO_ROOT=../platform-cicd \
+PLATFORM_REPO_ROOT=../platform-gitops \
   python3 ../toolbox/scripts/render-argocd-apps.py
 ```
 
@@ -247,18 +257,18 @@ Les anciennes interventions manuelles de bootstrap ont été absorbées par les
 scripts versionnés localement, avec une copie partagée dans
 `../toolbox` :
 
-- `../platform-cicd/scripts/gitlab-seed.py` crée/seede les projets applicatifs et manifests,
+- `../toolbox/scripts/gitlab-seed.py` crée/seede les projets applicatifs et manifests,
   génère les `.gitlab-ci.yml`, initialise les branches d'environnement et
   configure les protections GitLab.
 - `scripts/gitlab-runner-token.py` et `scripts/argocd-repo-creds.py` créent
   les secrets nécessaires sans action UI.
 - `scripts/render-argocd-apps.py` génère les `AppProject` et l'`ApplicationSet`
-  depuis `argocd/apps.yaml` et `argocd/apps/*.yaml`.
+  depuis `platform-gitops/argocd/apps.yaml` et `platform-gitops/argocd/apps/*.yaml`.
 
 L'ensemble des scripts d'outillage est écrit en **Python 3** (anciennement
 Ruby et Bash). Les scripts qui lisent ou écrivent du YAML
 (`filter-argocd-install.py`, `argocd-repo-creds.py`, `render-argocd-apps.py`,
-`../platform-cicd/scripts/gitlab-seed.py`) nécessitent `pyyaml` (`pip3 install -r requirements.txt`) ;
+`../toolbox/scripts/gitlab-seed.py`) nécessitent `pyyaml` (`pip3 install -r requirements.txt`) ;
 `init-project.py` et `gitlab-runner-token.py` fonctionnent sans dépendance
 externe. Dans la toolbox, `PLATFORM_REPO_ROOT` remplace les anciens chemins
 implicites basés sur l'emplacement du script.

@@ -17,6 +17,9 @@ des repos specialises avec des variables explicites :
 
 La vue globale du projet vit ici :
 
+- `docs/repo-map.md` : role de chaque repo du workspace.
+- `docs/learning-path.md` : parcours guide pour apprendre et verifier le POC.
+- `docs/source-control.md` : separation GitHub amont vs GitLab runtime.
 - `docs/prd.md` : intention, périmètre et limites du POC.
 - `docs/spec-fonctionnelle.md` : flow Git, CI/CD et parcours applicatif.
 - `docs/spec-technique.md` : détails d'implémentation et contraintes infra.
