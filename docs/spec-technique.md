@@ -134,14 +134,12 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
     recopiés depuis le fichier d'app, pas reconstruits implicitement.
     Cloisonnement explicite : une app ne peut pas, même par erreur de
     génération ou compromission, affecter les ressources d'une autre app. Plus
-    de fichier YAML à créer à la main par app. Implémentation bootstrap locale :
-    `scripts/render-argocd-apps.py`, dont la sortie est committée dans
-    `argocd/managed/apps-appset.yaml` (régénérée par `make
-    argocd-apps-render`, à pousser sur `origin main`) et synchronisée en
-    continu par le root Application "app of apps" (`argocd/root-app.yaml`,
-    cf. "Point d'entrée" dans AGENTS.md). Une copie réutilisable existe aussi
-    dans `toolbox/scripts/render-argocd-apps.py`, pilotable avec
-    `PLATFORM_REPO_ROOT`.
+    de fichier YAML à créer à la main par app. La génération est assurée par
+    `platform-cicd/scripts/render-argocd-apps.py` (cible `make argocd-apps-render`),
+    déclenchée automatiquement par un job CI au merge d'une PR sur `platform-gitops`.
+    La sortie est committée dans `argocd/managed/apps-appset.yaml` et synchronisée
+    en continu par le root Application "app of apps" (`argocd/root-app.yaml`,
+    cf. "Point d'entrée" dans AGENTS.md).
   - **`toolbox/scripts/gitlab-seed.py` généralisé** : boucle sur l'inventaire pour créer et
     seeder les dépôts `<app>`/`<app>-iac`, configurer les gates, et
     initialiser les branches d'environnement du dépôt manifests selon
@@ -232,21 +230,11 @@ Les scripts de bootstrap restent présents dans `scripts/` afin que
 depuis `platform-cicd` sans dépendre d'un repo frère. `control-plane`
 orchestre ces cibles via son propre `Makefile`.
 
-Une copie réutilisable de ces utilitaires a été extraite dans
-`toolbox`. Cette toolbox sert aux autres projets ou aux appels
-hors du dépôt GitOps. Les scripts y acceptent `PLATFORM_REPO_ROOT` pour
-pointer vers la racine `platform-gitops` :
-
-```sh
-PLATFORM_REPO_ROOT=platform-gitops \
-  python3 toolbox/scripts/render-argocd-apps.py
-```
-
-Règle de maintenance : tant que le bootstrap plateforme dépend des scripts
-locaux, toute correction fonctionnelle d'un utilitaire partagé doit être
-répercutée dans les deux emplacements ou remplacée explicitement par un wrapper
-documenté. La toolbox ne doit pas devenir une dépendance implicite non déclarée
-de `make bootstrap`.
+Les utilitaires d'onboarding applicatif (`gitlab-seed.py`, `argocd-repo-creds.py`,
+`init-project.py`) vivent dans `toolbox` et s'appellent avec `PLATFORM_REPO_ROOT`
+pointant vers `platform-gitops`. La génération des manifests ArgoCD
+(`render-argocd-apps.py`) est exécutée par `platform-cicd` via un job CI au
+merge sur `platform-gitops` — elle ne fait pas partie de la toolbox utilisateur.
 
 ## Dette IaC connue
 
@@ -262,8 +250,9 @@ scripts versionnés localement, avec une copie partagée dans
   configure les protections GitLab.
 - `scripts/gitlab-runner-token.py` et `scripts/argocd-repo-creds.py` créent
   les secrets nécessaires sans action UI.
-- `scripts/render-argocd-apps.py` génère les `AppProject` et l'`ApplicationSet`
-  depuis `platform-gitops/argocd/apps.yaml` et `platform-gitops/argocd/apps/*.yaml`.
+- `platform-cicd/scripts/render-argocd-apps.py` génère les `AppProject` et l'`ApplicationSet`
+  depuis `platform-gitops/argocd/apps.yaml` et `platform-gitops/argocd/apps/*.yaml`,
+  déclenché automatiquement par un job CI au merge d'une PR sur `platform-gitops`.
 
 L'ensemble des scripts d'outillage est écrit en **Python 3** (anciennement
 Ruby et Bash). Les scripts qui lisent ou écrivent du YAML
