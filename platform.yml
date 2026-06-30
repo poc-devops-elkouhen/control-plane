@@ -19,7 +19,7 @@ platform:
     toolbox: ../toolbox
     ciTemplates: ../ci-templates
   ciTemplate:
-    projectPath: root/ci-templates
+    projectPath: infra/ci-templates
     projectName: ci-templates
     sourceDir: ../ci-templates
     ref: v1.13.1
