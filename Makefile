@@ -47,7 +47,7 @@ cluster-from-images: vm-images-add ## Deploie le cluster depuis les boxes Packer
 
 platform-up: vm-images cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
 
-platform-fast-up: cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
+platform-provision: cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
 
 platform-bootstrap: ## Bootstrap ArgoCD et la plateforme via ../platform-cicd
 	@$(ENV); \
