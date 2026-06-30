@@ -10,8 +10,7 @@ platform:
   argocd:
     namespace: argocd
   registry:
-    namespace: registry
-    host: registry.registry.svc.cluster.local:5000
+    host: ghcr.io/poc-devops-elkouhen
   repositories:
     cluster: ../cluster
     platform: ../platform-cicd

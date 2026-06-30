@@ -64,7 +64,8 @@ projets. Toute valeur necessaire a l'autonomie d'un repo doit rester declaree
 dans ce repo, puis peut etre surchargee ici pour orchestrer le POC complet.
 
 Les compromis de securite propres au POC sont documentes dans
-`docs/security-poc.md`.
+`docs/security-poc.md`, incluant la gestion des secrets chiffres SOPS
+(`secrets/github-credentials.yaml`).
 
 ## Scripts workspace
 

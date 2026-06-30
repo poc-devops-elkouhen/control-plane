@@ -27,3 +27,68 @@ manifests, lecture ArgoCD, runner registration.
 Le bootstrap ArgoCD injecte une CA locale depuis le trousseau macOS. Pour une
 plateforme durable, gerer la CA comme un secret/config declare, versionne selon
 le niveau de sensibilite, et applique par GitOps.
+
+## Gestion des secrets sensibles — SOPS + age
+
+Les credentials qui ne doivent pas apparaitre en clair dans git (PAT GitHub,
+tokens de service) sont stockes dans `secrets/` sous forme de fichiers SOPS
+chiffres avec `age`.
+
+### Structure
+
+```
+.sops.yaml              # règle de chiffrement (commité)
+secrets/
+  github-credentials.yaml   # fichier chiffré (commité)
+~/.config/sops/age/keys.txt # clé privée age (JAMAIS commitée)
+```
+
+### Prérequis
+
+```bash
+brew install age sops
+```
+
+La cle privee est generee une seule fois et stockee localement :
+
+```bash
+age-keygen -o ~/.config/sops/age/keys.txt
+```
+
+La cle publique correspondante est enregistree dans `.sops.yaml`.
+
+### Modifier un secret
+
+```bash
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets/github-credentials.yaml
+```
+
+SOPS ouvre l'editeur avec le contenu dechiffre. A la fermeture, le fichier est
+re-chiffre automatiquement.
+
+### Déployer le secret dans le cluster
+
+```bash
+make flux-github-credentials
+```
+
+Cette cible décrypte le fichier SOPS et crée (ou met à jour) le secret
+`github-credentials` dans le namespace `flux-system` via `platform-cicd`.
+
+### Lire une valeur manuellement
+
+```bash
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt \
+  sops --decrypt --extract '["github_pat"]' secrets/github-credentials.yaml
+```
+
+### Ce qui est commité / non commité
+
+| Fichier | Commité | Raison |
+|---|---|---|
+| `.sops.yaml` | oui | contient uniquement la clé publique |
+| `secrets/*.yaml` | oui | chiffré par SOPS, illisible sans la clé privée |
+| `~/.config/sops/age/keys.txt` | non | clé privée, à sauvegarder hors git |
+
+Pour une plateforme durable, centraliser la clé dans un gestionnaire de secrets
+(Vault, AWS Secrets Manager) et remplacer `age` par le KMS correspondant.

@@ -35,7 +35,6 @@ def main() -> None:
         "GITLAB_NAMESPACE": platform["gitlab"]["namespace"],
         "INTERNAL_GITLAB_HOST": platform["gitlab"]["internalHost"],
         "ARGOCD_NAMESPACE": platform["argocd"]["namespace"],
-        "REGISTRY_NAMESPACE": platform["registry"]["namespace"],
         "REGISTRY_HOST": platform["registry"]["host"],
         "ARGOCD_VERSION": versions["argocd"],
         "KUBERNETES_VERSION": versions["kubernetes"],
