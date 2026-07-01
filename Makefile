@@ -1,3 +1,6 @@
+SHELL := /bin/bash -e -o pipefail
+.SHELLFLAGS := -e -o pipefail -c
+
 CONFIG ?= platform.yml
 ENV_FILE ?= .control-plane.env
 MAKE_BIN ?= make
@@ -7,7 +10,7 @@ STOP_AFTER ?=
 
 GHCR_NAMESPACES ?= helloworld-dev helloworld-rec helloworld-preprod helloworld
 
-.PHONY: help validate env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-fast-up platform-bootstrap platform-bootstrap-from-% platform-down platform-destroy gitlab-tf-credentials argocd-repo-creds argocd-password gitlab-password status ghcr-pull-secret gitlab-git-creds
+.PHONY: help validate env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-provision platform-bootstrap platform-bootstrap-from-% platform-bootstrap-status platform-bootstrap-reset platform-down platform-destroy gitlab-tf-credentials argocd-repo-creds argocd-password gitlab-password status ghcr-pull-secret gitlab-git-creds
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
@@ -49,9 +52,17 @@ cluster-from-images: vm-images-add ## Deploie le cluster depuis les boxes Packer
 	  metallb_chart_version="$$METALLB_CHART_VERSION" \
 	  traefik_chart_version="$$TRAEFIK_CHART_VERSION"
 
-platform-up: vm-images cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
+platform-up: ## Sequence complete (images, cluster, bootstrap, git-creds), reprise automatique en cas d'echec
+	python3 scripts/bootstrap.py --config "$(CONFIG)" --make "$(MAKE_BIN)"
 
-platform-provision: cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
+platform-provision: ## Comme platform-up mais sans reconstruire les images VM
+	python3 scripts/bootstrap.py --config "$(CONFIG)" --make "$(MAKE_BIN)" --from cluster-from-images
+
+platform-bootstrap-status: ## Affiche l'etat de reprise de platform-up (etapes terminees / restantes)
+	python3 scripts/bootstrap.py --config "$(CONFIG)" --list
+
+platform-bootstrap-reset: ## Efface l'etat de reprise sauvegarde de platform-up
+	rm -f .bootstrap-state.json
 
 platform-bootstrap: ## Bootstrap ArgoCD et la plateforme via ../platform-cicd, relancable avec START_AT=<etape>
 	@$(ENV); \
@@ -62,18 +73,9 @@ platform-bootstrap: ## Bootstrap ArgoCD et la plateforme via ../platform-cicd, r
 	  GITLAB_NAMESPACE="$$GITLAB_NAMESPACE" \
 	  ARGOCD_NAMESPACE="$$ARGOCD_NAMESPACE" \
 	  START_AT="$(START_AT)" \
-	  STOP_AFTER="$(STOP_AFTER)"; \
-	if [ -n "$(STOP_AFTER)" ]; then \
-	  echo "==> control-plane: STOP_AFTER=$(STOP_AFTER), gitlab-git-creds non execute"; \
-	  exit 0; \
-	fi; \
-	echo "==> control-plane: gitlab-git-creds -> make -C $$TOOLBOX_REPO gitlab-git-creds"; \
-	$(MAKE_BIN) -C "$$TOOLBOX_REPO" gitlab-git-creds \
-	  GITLAB_DOMAIN="$$GITLAB_DOMAIN" \
-	  GITLAB_NAMESPACE="$$GITLAB_NAMESPACE" \
-	  INTERNAL_GITLAB_HOST="$$INTERNAL_GITLAB_HOST"
+	  STOP_AFTER="$(STOP_AFTER)"
 
-platform-bootstrap-from-%: ## Reprend le bootstrap plateforme depuis une etape platform-cicd
+platform-bootstrap-from-%: ## Reprend le bootstrap plateforme depuis une etape platform-cicd (reprise fine, cf. platform-up --platform-start-at)
 	$(MAKE) platform-bootstrap START_AT=$*
 
 gitlab-git-creds: ## Cree un PAT GitLab root et l'injecte dans git-credential pour l'URL interne cluster
@@ -93,6 +95,7 @@ platform-destroy: ## Detruit les VMs de la plateforme
 	@$(ENV); \
 	echo "==> control-plane: platform-destroy -> make -C $$CLUSTER_REPO destroy"; \
 	$(MAKE_BIN) -C "$$CLUSTER_REPO" destroy
+	@rm -f .bootstrap-state.json
 
 gitlab-tf-credentials: ## Cree/rotate le PAT GitLab consomme par Terraform
 	@$(ENV); \
