@@ -5,7 +5,7 @@ ENV = CONFIG="$(CONFIG)" python3 scripts/export-env.py > "$(ENV_FILE)" && . "$(E
 
 GHCR_NAMESPACES ?= helloworld-dev helloworld-rec helloworld-preprod helloworld
 
-.PHONY: help validate env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-fast-up platform-bootstrap platform-down platform-destroy gitlab-seed argocd-repo-creds argocd-password gitlab-password status ghcr-pull-secret gitlab-git-creds
+.PHONY: help validate env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-fast-up platform-bootstrap platform-down platform-destroy gitlab-tf-credentials argocd-repo-creds argocd-password gitlab-password status ghcr-pull-secret gitlab-git-creds
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
@@ -83,14 +83,12 @@ platform-destroy: ## Detruit les VMs de la plateforme
 	echo "==> control-plane: platform-destroy -> make -C $$CLUSTER_REPO destroy"; \
 	$(MAKE_BIN) -C "$$CLUSTER_REPO" destroy
 
-gitlab-seed: ## Seed les projets GitLab via ../toolbox
+gitlab-tf-credentials: ## Cree/rotate le PAT GitLab consomme par Terraform
 	@$(ENV); \
-	echo "==> control-plane: gitlab-seed -> make -C $$TOOLBOX_REPO gitlab-seed"; \
-	$(MAKE_BIN) -C "$$TOOLBOX_REPO" gitlab-seed \
-	  PLATFORM_REPO_ROOT="$$GITOPS_REPO_ROOT" \
+	echo "==> control-plane: gitlab-tf-credentials -> make -C $$PLATFORM_REPO_ROOT gitlab-tf-credentials"; \
+	$(MAKE_BIN) -C "$$PLATFORM_REPO_ROOT" gitlab-tf-credentials \
 	  GITLAB_DOMAIN="$$GITLAB_DOMAIN" \
-	  GITLAB_NAMESPACE="$$GITLAB_NAMESPACE" \
-	  CI_TEMPLATE_SOURCE_DIR="$$CI_TEMPLATE_SOURCE_DIR"
+	  GITLAB_NAMESPACE="$$GITLAB_NAMESPACE"
 
 argocd-repo-creds: ## Cree les credentials ArgoCD pour les repos manifests prives
 	@$(ENV); \

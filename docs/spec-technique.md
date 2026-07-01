@@ -33,8 +33,8 @@ Notes :
 - Le dépôt de code (`<app>`) et le dépôt de manifests (`<app>-iac`)
   restent deux projets GitLab distincts : le pipeline CI tourne dans `<app>`
   mais clone et pousse sur `<app>-iac` via `GITLAB_PUSH_TOKEN`.
-- **Gate sur `main` du dépôt de code** (`<app>`) : configuré par
-  `toolbox/scripts/gitlab-seed.py` (`configure_main_gate`) — branche protégée,
+- **Gate sur `main` du dépôt de code** (`<app>`) : configuré par Terraform
+  `gitlab-projects-iac` — branche protégée,
   `push_access_level: No one`, `merge_access_level: Maintainers`. Les
   features ne peuvent donc atteindre `main` que via une MR mergée par un
   Maintainer. L'« approbation obligatoire » (nombre d'approbateurs requis,
@@ -91,9 +91,9 @@ seul dépôt de code (`helloworld`), deux sous-dossiers/modules
 `helloworld-svc` (API FastAPI) et `helloworld-gui` (frontend statique
 nginx, qui appelle l'API via `helloworld-svc` en DNS interne du namespace,
 avec un préfixe HTTP proxié — pas de configuration d'URL par stage). Le fichier
-`platform-gitops/argocd/apps/helloworld.yaml` porte `code:` au niveau app (pas par service) et `services: [...]` ne liste
-plus que `name`/`image` par service ; `toolbox/scripts/gitlab-seed.py` crée et
-seed un seul projet GitLab par app (boucle `apps` de l'inventaire) ;
+`platform-gitops/argocd/apps/helloworld/app.yaml` porte `code:` au niveau app (pas par service) et `services: [...]` ne liste
+plus que `name`/`image` par service ; Terraform `gitlab-projects-iac` crée les
+projets GitLab applicatifs ;
 `ci-templates/gitlab-ci.yml` boucle sur `${SERVICES}` (liste
 `<service>=<image>` espacée) pour le build (un `Dockerfile` par
 sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
@@ -101,9 +101,8 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
 ## Scaling : implémentation
 
 - **Repo `ci-templates`** (GitLab) : héberge le pipeline générique décrit
-  ci-dessus. Source locale : `ci-templates/`, seedée par `make gitlab-seed`
-  dans `ci-templates` (namespace `root`) avec une ref versionnée
-  (`v0.11.1` actuellement, déclarée dans `platform-gitops/argocd/apps.yaml`).
+  ci-dessus. Source locale : `ci-templates/`, projet créé par Terraform
+  `gitlab-projects-iac` avec une ref versionnée déclarée par application.
   Le `.gitlab-ci.yml` de chaque app se réduit à un `include` de
   ce template, **`ref` épinglée à une version** (ex. `v1.3.0`, pas `main`)
   + ses variables propres (`IMAGE`, `MANIFESTS_PROJECT_PATH`, `SERVICES`,
@@ -114,10 +113,8 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
   bumpé sa `ref`. Choix délibéré au prix d'un bump manuel par app : isole le
   rayon d'impact d'une régression du template, plutôt que de la propager
   instantanément à toutes les apps.
-- **Inventaire explicite `platform-gitops/argocd/apps.yaml` +
-  `platform-gitops/argocd/apps/*.yaml`** :
-  `platform-gitops/argocd/apps.yaml` porte la configuration globale et le
-  répertoire d'apps ; chaque application a son propre fichier dans
+- **Descriptors explicites `platform-gitops/argocd/apps/<app>/app.yaml`** :
+  chaque application a son propre répertoire dans
   `platform-gitops/argocd/apps/`. L'ensemble reste
   la source de vérité des
   projets GitLab (`code.projectPath`, `manifests.projectPath`,
@@ -140,18 +137,15 @@ sous-dossier) et le déploiement (plusieurs `kustomize edit set image`).
     La sortie est committée dans `argocd/managed/apps-appset.yaml` et synchronisée
     en continu par le root Application "app of apps" (`argocd/root-app.yaml`,
     cf. "Point d'entrée" dans AGENTS.md).
-  - **`toolbox/scripts/gitlab-seed.py` généralisé** : boucle sur l'inventaire pour créer et
-    seeder les dépôts `<app>`/`<app>-iac`, configurer les gates, et
-    initialiser les branches d'environnement du dépôt manifests selon
-    `HAS_PREPROD`.
+  - **Terraform `gitlab-projects-iac`** : crée les dépôts `<app>`/`<app>-iac`,
+    configure les gates, les variables et les protections GitLab.
 - **Add-ons plateforme sous ArgoCD** : le root Application synchronise aussi
   les `Application` déclarées dans `argocd/managed/` pour les composants de
   plateforme applicative : GitLab, agent Kubernetes GitLab, registry interne
   et exposition HTTP d'ArgoCD. Les add-ons cluster bas niveau (Gateway API,
   MetalLB, Traefik et Gateway partagée) sont provisionnés par Ansible.
 
-Modifier `platform-gitops/argocd/apps.yaml` ou un fichier
-`platform-gitops/argocd/apps/*.yaml` se fait via une pull request sur le dépôt
+Modifier un fichier `platform-gitops/argocd/apps/<app>/app.yaml` se fait via une pull request sur le dépôt
 GitHub `platform-gitops`. Au merge, un job CI de `platform-cicd` régénère
 automatiquement `argocd/managed/apps-appset.yaml` et commite le résultat sur
 `main` : ArgoCD lit Git, pas le disque local. Pendant l'amorçage, certaines
@@ -204,29 +198,25 @@ Pour une app standard, l'intégration attendue côté plateforme est :
      `Dockerfile` dans chaque sous-dossier ;
    - `<app>-iac/` pour les manifests, avec le chemin k8s déclaré dans
      `manifests.path` et un `kustomization.yaml`.
-2. Ajouter l'app dans `platform-gitops/argocd/apps/<app>.yaml` (ou lancer `make init-project CODE_REPO=... IAC_REPO=...`).
+2. Ajouter l'app dans `platform-gitops/argocd/apps/<app>/app.yaml`.
 3. Ouvrir une pull request sur le dépôt GitHub `platform-gitops`. Au merge,
    le job CI de `platform-cicd` régénère `argocd/managed/apps-appset.yaml`
    et le commite sur `main` — ArgoCD détecte le changement et converge.
-4. Lancer `make gitlab-seed` pour créer ou mettre à jour les projets GitLab,
-   le `.gitlab-ci.yml` applicatif, les branches d'environnement du dépôt
-   manifests, les variables CI/CD et les protections.
-5. Lancer `make argocd-repo-creds` si un nouveau dépôt manifests privé a été
-   ajouté, afin qu'ArgoCD puisse le lire.
+4. Exécuter Terraform `gitlab-projects-iac` pour créer ou mettre à jour les
+   projets GitLab, variables CI/CD et protections.
 
 ## Outillage partagé
 
 Les scripts de bootstrap restent présents dans `scripts/` afin que
-`make bootstrap`, `make gitlab-seed`, `make argocd-repo-creds`,
-`make argocd-apps-render` et `make init-project` continuent de fonctionner
-depuis `platform-cicd` sans dépendre d'un repo frère. `control-plane`
-orchestre ces cibles via son propre `Makefile`.
+`make bootstrap`, `make gitlab-tf-credentials`, `make argocd-apps-render` et
+`make init-project` continuent de fonctionner depuis `platform-cicd` sans
+dépendre d'un repo frère. `control-plane` orchestre ces cibles via son propre
+`Makefile`.
 
-Les utilitaires d'onboarding applicatif (`gitlab-seed.py`, `argocd-repo-creds.py`,
-`init-project.py`) vivent dans `toolbox` et s'appellent avec `PLATFORM_REPO_ROOT`
-pointant vers `platform-gitops`. La génération des manifests ArgoCD
-(`render-argocd-apps.py`) est exécutée par `platform-cicd` via un job CI au
-merge sur `platform-gitops` — elle ne fait pas partie de la toolbox utilisateur.
+Les utilitaires d'onboarding applicatif restants vivent dans `toolbox` et
+s'appellent avec `PLATFORM_REPO_ROOT` pointant vers `platform-gitops`. La
+génération des manifests ArgoCD (`render-argocd-apps.py`) est exécutée par
+`platform-cicd` via un job CI au merge sur `platform-gitops`.
 
 ## Dette IaC connue
 
@@ -234,23 +224,20 @@ La chaîne CI/CD principale (`make bootstrap`, GitLab, ArgoCD, registry,
 `helloworld`, inventaire multi-apps) est
 maintenant automatisée dans le dépôt.
 Les anciennes interventions manuelles de bootstrap ont été absorbées par les
-scripts versionnés localement, avec une copie partagée dans
-`toolbox` :
+scripts versionnés localement et Terraform `gitlab-projects-iac` :
 
-- `toolbox/scripts/gitlab-seed.py` crée/seede les projets applicatifs et manifests,
-  génère les `.gitlab-ci.yml`, initialise les branches d'environnement et
-  configure les protections GitLab.
-- `scripts/gitlab-runner-token.py` et `scripts/argocd-repo-creds.py` créent
-  les secrets nécessaires sans action UI.
+- `platform-cicd/scripts/gitlab-tf-credentials.py` crée le PAT/Secret consommé
+  par Terraform après que GitLab est prêt.
+- `scripts/gitlab-runner-token.py` crée le secret runner nécessaire sans action UI.
 - `platform-cicd/scripts/render-argocd-apps.py` génère les `AppProject` et l'`ApplicationSet`
-  depuis `platform-gitops/argocd/apps.yaml` et `platform-gitops/argocd/apps/*.yaml`,
+  depuis `platform-gitops/argocd/apps/<app>/app.yaml`,
   déclenché automatiquement par un job CI au merge d'une PR sur `platform-gitops`.
 
 L'ensemble des scripts d'outillage est écrit en **Python 3** (anciennement
 Ruby et Bash). Les scripts qui lisent ou écrivent du YAML
-(`filter-argocd-install.py`, `argocd-repo-creds.py`, `render-argocd-apps.py`,
-`toolbox/scripts/gitlab-seed.py`) nécessitent `pyyaml` (`pip3 install -r requirements.txt`) ;
-`init-project.py` et `gitlab-runner-token.py` fonctionnent sans dépendance
+(`filter-argocd-install.py`, `render-argocd-apps.py`) nécessitent `pyyaml`
+(`pip3 install -r requirements.txt`) ; `init-project.py`,
+`gitlab-tf-credentials.py` et `gitlab-runner-token.py` fonctionnent sans dépendance
 externe. Dans la toolbox, `PLATFORM_REPO_ROOT` remplace les anciens chemins
 implicites basés sur l'emplacement du script.
 - `argocd/managed/` déclare les add-ons plateforme applicative synchronisés par

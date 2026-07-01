@@ -108,19 +108,16 @@ sous-dossier avec son propre `Dockerfile`.
   le cas single-service.
 
 **Statut : implémenté.** Détail de l'implémentation (`helloworld-svc`/
-`helloworld-gui`, schéma `platform-gitops/argocd/apps.yaml` +
-`platform-gitops/argocd/apps/*.yaml`,
-`toolbox/scripts/gitlab-seed.py`, `ci-templates/gitlab-ci.yml`) dans la
-spec technique.
+`helloworld-gui`, schéma `platform-gitops/argocd/apps/<app>/app.yaml`,
+Terraform `gitlab-projects-iac`, `ci-templates/gitlab-ci.yml`) dans la spec
+technique.
 
 ## Scaling : pattern réplicable pour plusieurs apps
 
 Cf. "Objectif du scaling" dans le [PRD](./prd.md) pour le pourquoi. Le
-mécanisme (repo `ci-templates`, inventaire `platform-gitops/argocd/apps.yaml`
-+ `platform-gitops/argocd/apps/*.yaml`,
-`ApplicationSet` ArgoCD, `toolbox/scripts/gitlab-seed.py` généralisé et toolbox
-`toolbox`) est détaillé dans la
-spec technique.
+mécanisme (repo `ci-templates`, descriptors
+`platform-gitops/argocd/apps/<app>/app.yaml`, manifests ArgoCD générés et
+Terraform `gitlab-projects-iac`) est détaillé dans la spec technique.
 
 ### Parcours fonctionnel : ajouter une application
 
@@ -130,12 +127,12 @@ Le parcours cible pour une app standard est volontairement court :
    et un `Dockerfile` par service.
 2. Ajouter le dépôt local de manifests GitOps de l'app, avec les manifests
    Kubernetes et un `kustomization.yaml` sous le chemin déclaré.
-3. Ajouter un fichier `platform-gitops/argocd/apps/<app>.yaml` : nom de
+3. Ajouter un fichier `platform-gitops/argocd/apps/<app>/app.yaml` : nom de
    l'app, dépôt de code, dépôt manifests, services, images, environnements et
    option `hasPreprod`.
 4. Régénérer les Applications ArgoCD depuis l'inventaire.
-5. Seeder GitLab pour créer ou mettre à jour les projets, branches, variables
-   CI/CD et protections nécessaires.
+5. Exécuter Terraform `gitlab-projects-iac` pour créer ou mettre à jour les
+   projets, branches, variables CI/CD et protections nécessaires.
 6. Pousser le changement GitOps sur le dépôt source lu par ArgoCD.
 
 À la fin de ce parcours, l'utilisateur doit obtenir sans action manuelle :

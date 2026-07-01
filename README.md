@@ -13,7 +13,7 @@ des repos specialises avec des variables explicites :
 - `cluster` : socle Kubernetes, storage, Gateway API, MetalLB, Traefik.
 - `platform-cicd` : bootstrap ArgoCD, GitLab, registry et runner.
 - `platform-gitops` : configuration suivie en continu par ArgoCD.
-- `toolbox` : seed GitLab, credentials ArgoCD et onboarding.
+- `toolbox` : utilitaires operateur hors bootstrap principal.
 
 La vue globale du projet vit ici :
 
@@ -55,8 +55,7 @@ Le chemin historique sans images Packer reste disponible :
 ```sh
 make cluster-up
 make platform-bootstrap
-make gitlab-seed
-make argocd-repo-creds
+make gitlab-tf-credentials
 ```
 
 `platform.yml` est un profil operateur local, pas la source de verite des
