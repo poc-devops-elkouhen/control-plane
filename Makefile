@@ -2,10 +2,12 @@ CONFIG ?= platform.yml
 ENV_FILE ?= .control-plane.env
 MAKE_BIN ?= make
 ENV = CONFIG="$(CONFIG)" python3 scripts/export-env.py > "$(ENV_FILE)" && . "$(ENV_FILE)"
+START_AT ?=
+STOP_AFTER ?=
 
 GHCR_NAMESPACES ?= helloworld-dev helloworld-rec helloworld-preprod helloworld
 
-.PHONY: help validate env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-fast-up platform-bootstrap platform-down platform-destroy gitlab-tf-credentials argocd-repo-creds argocd-password gitlab-password status ghcr-pull-secret gitlab-git-creds
+.PHONY: help validate env vm-images-build vm-images-add vm-images cluster-up cluster-from-images platform-up platform-fast-up platform-bootstrap platform-bootstrap-from-% platform-down platform-destroy gitlab-tf-credentials argocd-repo-creds argocd-password gitlab-password status ghcr-pull-secret gitlab-git-creds
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
@@ -51,19 +53,28 @@ platform-up: vm-images cluster-from-images platform-bootstrap ## Construit les i
 
 platform-provision: cluster-from-images platform-bootstrap ## Construit les images, deploie le cluster et bootstrappe la plateforme
 
-platform-bootstrap: ## Bootstrap ArgoCD et la plateforme via ../platform-cicd, puis injecte les git credentials GitLab
+platform-bootstrap: ## Bootstrap ArgoCD et la plateforme via ../platform-cicd, relancable avec START_AT=<etape>
 	@$(ENV); \
 	echo "==> control-plane: platform-bootstrap -> make -C $$PLATFORM_REPO_ROOT bootstrap"; \
 	$(MAKE_BIN) -C "$$PLATFORM_REPO_ROOT" bootstrap \
 	  ARGOCD_VERSION="$$ARGOCD_VERSION" \
 	  GITLAB_DOMAIN="$$GITLAB_DOMAIN" \
 	  GITLAB_NAMESPACE="$$GITLAB_NAMESPACE" \
-	  ARGOCD_NAMESPACE="$$ARGOCD_NAMESPACE"; \
+	  ARGOCD_NAMESPACE="$$ARGOCD_NAMESPACE" \
+	  START_AT="$(START_AT)" \
+	  STOP_AFTER="$(STOP_AFTER)"; \
+	if [ -n "$(STOP_AFTER)" ]; then \
+	  echo "==> control-plane: STOP_AFTER=$(STOP_AFTER), gitlab-git-creds non execute"; \
+	  exit 0; \
+	fi; \
 	echo "==> control-plane: gitlab-git-creds -> make -C $$TOOLBOX_REPO gitlab-git-creds"; \
 	$(MAKE_BIN) -C "$$TOOLBOX_REPO" gitlab-git-creds \
 	  GITLAB_DOMAIN="$$GITLAB_DOMAIN" \
 	  GITLAB_NAMESPACE="$$GITLAB_NAMESPACE" \
 	  INTERNAL_GITLAB_HOST="$$INTERNAL_GITLAB_HOST"
+
+platform-bootstrap-from-%: ## Reprend le bootstrap plateforme depuis une etape platform-cicd
+	$(MAKE) platform-bootstrap START_AT=$*
 
 gitlab-git-creds: ## Cree un PAT GitLab root et l'injecte dans git-credential pour l'URL interne cluster
 	@$(ENV); \

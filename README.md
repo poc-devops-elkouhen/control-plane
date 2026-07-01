@@ -50,6 +50,14 @@ make cluster-from-images
 make platform-bootstrap
 ```
 
+En cas d'échec pendant le bootstrap plateforme, reprendre à l'étape utile sans
+rejouer tout le début :
+
+```sh
+make platform-bootstrap START_AT=gitlab-tf-credentials
+make platform-bootstrap-from-gitlab-tf-credentials
+```
+
 Le chemin historique sans images Packer reste disponible :
 
 ```sh
